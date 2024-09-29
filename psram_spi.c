@@ -45,10 +45,10 @@ void __isr psram_dma_complete_handler() {
 }
 #endif // defined(PSRAM_ASYNC) && defined(PSRAM_ASYNC_SYNCHRONIZE)
 
-psram_spi_inst_t psram_spi_init_clkdiv(PIO pio, int sm, float clkdiv, bool fudge) {
+psram_spi_inst_t psram_spi_init_clkdiv(PIO pio, int sm, float clkdiv) {
     psram_spi_inst_t spi;
     spi.pio = pio;
-    spi.offset = pio_add_program(spi.pio, fudge ? &spi_psram_fudge_program : &spi_psram_program);
+    spi.offset = pio_add_program(spi.pio, &spi_cpha0_program);
     if (sm == -1) {
         spi.sm = pio_claim_unused_sm(spi.pio, true);
     } else {
@@ -61,6 +61,19 @@ psram_spi_inst_t psram_spi_init_clkdiv(PIO pio, int sm, float clkdiv, bool fudge
     spi.spinlock = spin_lock_init(spin_id);
 #endif
 
+    gpio_init(PSRAM_PIN_SCK);
+    gpio_init(PSRAM_PIN_CS);
+    gpio_init(PSRAM_PIN_MISO);
+    gpio_init(PSRAM_PIN_MOSI);
+
+    gpio_pull_up(PSRAM_PIN_MISO);
+    gpio_pull_up(PSRAM_PIN_MOSI);
+
+    gpio_set_dir(PSRAM_PIN_CS,GPIO_OUT);
+    gpio_set_dir(PSRAM_PIN_SCK, GPIO_OUT);
+    gpio_set_dir(PSRAM_PIN_MISO, GPIO_IN);
+    gpio_set_dir(PSRAM_PIN_MOSI, GPIO_OUT);
+    
     gpio_set_drive_strength(PSRAM_PIN_CS, GPIO_DRIVE_STRENGTH_4MA);
     gpio_set_drive_strength(PSRAM_PIN_SCK, GPIO_DRIVE_STRENGTH_4MA);
     gpio_set_drive_strength(PSRAM_PIN_MOSI, GPIO_DRIVE_STRENGTH_4MA);
@@ -68,8 +81,9 @@ psram_spi_inst_t psram_spi_init_clkdiv(PIO pio, int sm, float clkdiv, bool fudge
     /* gpio_set_slew_rate(PSRAM_PIN_SCK, GPIO_SLEW_RATE_FAST); */
     /* gpio_set_slew_rate(PSRAM_PIN_MOSI, GPIO_SLEW_RATE_FAST); */
 
-    pio_spi_psram_cs_init(spi.pio, spi.sm, spi.offset, 8 /*n_bits*/, clkdiv, fudge, PSRAM_PIN_CS, PSRAM_PIN_MOSI, PSRAM_PIN_MISO);
-
+    //pio_spi_psram_cs_init(spi.pio, spi.sm, spi.offset, 8 /*n_bits*/, clkdiv, fudge, PSRAM_PIN_CS, PSRAM_PIN_MOSI, PSRAM_PIN_MISO);
+    pio_spi_init(spi.pio,spi.sm,spi.offset,8,clkdiv,0,0,PSRAM_PIN_SCK, PSRAM_PIN_MOSI, PSRAM_PIN_MISO);
+    /*
     // Write DMA channel setup
     spi.write_dma_chan = dma_claim_unused_channel(true);
     spi.write_dma_chan_config = dma_channel_get_default_config(spi.write_dma_chan);
@@ -107,53 +121,33 @@ psram_spi_inst_t psram_spi_init_clkdiv(PIO pio, int sm, float clkdiv, bool fudge
     irq_set_enabled(DMA_IRQ_0 + PSRAM_ASYNC_DMA_IRQ, true);
 #endif // defined(PSRAM_ASYNC_COMPLETE)
 #endif // defined(PSRAM_ASYNC)
-
+*/
     uint8_t psram_reset_en_cmd[] = {
         8,      // 8 bits to write
         0,      // 0 bits to read
         0x66u   // Reset enable command
     };
-    pio_spi_write_read_dma_blocking(&spi, psram_reset_en_cmd, 3, 0, 0);
+    //pio_spi_write_read_dma_blocking(&spi, psram_reset_en_cmd, 3, 0, 0);
+    pio_spi_write_read_blocking(&spi, psram_reset_en_cmd, 3, 0, 0);
     busy_wait_us(50);
     uint8_t psram_reset_cmd[] = {
         8,      // 8 bits to write
         0,      // 0 bits to read
         0x99u   // Reset command
     };
-    pio_spi_write_read_dma_blocking(&spi, psram_reset_cmd, 3, 0, 0);
+    pio_spi_write_read_blocking(&spi, psram_reset_cmd, 3, 0, 0);
     busy_wait_us(100);
     
     return spi;
 };
 
 psram_spi_inst_t psram_spi_init(PIO pio, int sm) {
-    return psram_spi_init_clkdiv(pio, sm, 1.0, true);
+    return psram_spi_init_clkdiv(pio, sm, 1.0);
 }
 
 void psram_spi_uninit(psram_spi_inst_t spi, bool fudge) {
-#if defined(PSRAM_ASYNC)
-    // Asynchronous DMA channel teardown
-    dma_channel_unclaim(spi.async_dma_chan);
-#if defined(PSRAM_ASYNC_COMPLETE)
-    irq_set_enabled(DMA_IRQ_0 + PSRAM_ASYNC_DMA_IRQ, false);
-    dma_irqn_set_channel_enabled(PSRAM_ASYNC_DMA_IRQ, spi.async_dma_chan, false);
-    irq_remove_handler(DMA_IRQ_0 + PSRAM_ASYNC_DMA_IRQ, psram_dma_complete_handler);
-#endif // defined(PSRAM_ASYNC_COMPLETE)
-#endif // defined(PSRAM_ASYNC)
-
-    // Write DMA channel teardown
-    dma_channel_unclaim(spi.write_dma_chan);
-
-    // Read DMA channel teardown
-    dma_channel_unclaim(spi.read_dma_chan);
-
-#if defined(PSRAM_SPINLOCK)
-    int spin_id = spin_lock_get_num(spi.spinlock);
-    spin_lock_unclaim(spin_id);
-#endif
-
     pio_sm_unclaim(spi.pio, spi.sm);
-    pio_remove_program(spi.pio, fudge ? &spi_psram_fudge_program : &spi_psram_program, spi.offset);
+    pio_remove_program(spi.pio, &spi_cpha0_program, spi.offset);
 }
 
 int test_psram(psram_spi_inst_t* psram_spi, int increment) {

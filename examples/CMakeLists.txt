@@ -4,7 +4,7 @@ set(CMAKE_C_STANDARD 11)
 
 # Initialise pico_sdk from installed location
 # (note this can come from environment, CMake cache etc)
-set(PICO_SDK_PATH "${CMAKE_SOURCE_DIR}/../../pico/pico-sdk")
+set(PICO_SDK_PATH "~/work/pico/pico-sdk")
 
 # Pull in Raspberry Pi Pico SDK (must be before project)
 include(pico_sdk_import.cmake)
@@ -31,12 +31,12 @@ add_compile_definitions(
 
 target_compile_definitions(psram-test PRIVATE
     # PSRAM_MUTEX=1
-    PSRAM_SPINLOCK=1
+    #PSRAM_SPINLOCK=1
     PSRAM_ASYNC=1
-    PSRAM_PIN_CS=9
-    PSRAM_PIN_SCK=10
-    PSRAM_PIN_MOSI=11
-    PSRAM_PIN_MISO=12
+    PSRAM_PIN_CS=21
+    PSRAM_PIN_SCK=2
+    PSRAM_PIN_MOSI=3
+    PSRAM_PIN_MISO=20
 )
 
 target_link_libraries(
@@ -46,6 +46,7 @@ target_link_libraries(
     hardware_pio
     hardware_dma
     hardware_pll
+	pico_multicore
 )
 
 pico_add_extra_outputs(psram-test)

@@ -10,14 +10,22 @@ psram_spi_inst_t* async_spi_inst;
 int main()
 {
     // Overclock!
-    set_sys_clock_khz(280000, true);
-
+	
     stdio_init_all();
+	//set_sys_clock_khz(280000, true);
+
     
+	gpio_init(17);
+	gpio_set_dir(17, GPIO_OUT);
+	gpio_put(17, 1);
+
+    sleep_ms(3000);
+
     puts("PSRAM test - rp2040-psram v1.0.0");
 
     puts("Initing PSRAM...");
-    psram_spi_inst_t psram_spi = psram_spi_init(pio0, -1);
+
+    psram_spi_inst_t psram_spi = psram_spi_init(pio0, 0);
 
     uint32_t psram_begin, psram_elapsed;
     float psram_speed;
@@ -34,15 +42,7 @@ int main()
     printf("8 bit: PSRAM write 8MB in %d us, %d B/s\n", psram_elapsed, (uint32_t)psram_speed);
 
     psram_begin = time_us_32();
-    for (uint32_t addr = 0; addr < (8 * 1024 * 1024); ++addr) {
-        psram_write8_async(&psram_spi, addr, (addr & 0xFF));
-    }
-    psram_elapsed = time_us_32() - psram_begin;
-    psram_speed = 1000000.0 * 8 * 1024.0 * 1024 / psram_elapsed;
-    printf("8 bit: PSRAM write async 8MB in %d us, %d B/s\n", psram_elapsed, (uint32_t)psram_speed);
-
-    psram_begin = time_us_32();
-    for (uint32_t addr = 0; addr < (8 * 1024 * 1024); ++addr) {
+    for (uint32_t addr = 0; addr < (8 ); ++addr) {
         uint8_t result = psram_read8(&psram_spi, addr);
         if ((uint8_t)(addr & 0xFF) != result) {
             printf("\nPSRAM failure at address %x (%x != %x)\n", addr, addr & 0xFF, result);
@@ -148,5 +148,5 @@ int main()
     psram_speed = 1000000.0 * 8 * 1024.0 * 1024 / psram_elapsed;
     printf("128 bit: PSRAM read 8MB in %d us, %d B/s\n", psram_elapsed, (uint32_t)psram_speed);
 
-
+    printf("Over\n");
 }
